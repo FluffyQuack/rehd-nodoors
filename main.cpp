@@ -1,11 +1,15 @@
 /**************************************************************************
 
 	Resident Evil HD Remaster / Resident Evil 0 HD Remaster - Door Skip Mod
-	Version 1.41
+	Version 1.5
 	
 	Written by FluffyQuack
 
 	--Change log--
+	v1.5:
+	- Code cleanup
+	- Changed compiler to VS2008 so the program won't be detected as false positives in anti-virus
+
 	v1.41:
 	- Removed admin check
 
@@ -50,7 +54,7 @@ enum
 UINT uiStatus = IDS_HELLO;
 const char *sStatus[] =
 {
-	"Door Skip mod by FluffyQuack (v1.41)", //IDS_HELLO
+	"Door Skip mod by FluffyQuack (v1.5)", //IDS_HELLO
 	"Waiting for game to start...", //IDS_WAITING
 	"Error: Couldn't read game memory.", //IDS_FAILED_READ
 	"Error: Couldn't write to game memory.", //IDS_FAILED_WRITE
@@ -63,7 +67,7 @@ const char szClassName[] = "FluffyQuack";
 const char szWindowName[] = "Door Skip mod";
 const char szREHDExecutable[] = "bhd.exe";
 const char szRE0Executable[] = "re0hd.exe";
-BYTE patternReadBuffer[100];
+BYTE readBuffer[100];
 BYTE REHD_Pattern[5] =
 {
 	0x8B, 0x46, 0x48, 0x85, 0xC0
@@ -164,20 +168,20 @@ DWORD GetProcessId(LPCSTR szProcessName)
 	PROCESSENTRY32 pe32;
 
 	HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	if (hSnap != INVALID_HANDLE_VALUE)
+	if(hSnap != INVALID_HANDLE_VALUE)
 	{
 		pe32.dwSize = sizeof(PROCESSENTRY32);
-		if (Process32First(hSnap, &pe32))
+		if(Process32First(hSnap, &pe32))
 		{
 			do
 			{
-				if (!lstrcmpi(pe32.szExeFile, szProcessName))
+				if(!lstrcmpi(pe32.szExeFile, szProcessName))
 				{
 					CloseHandle(hSnap);
 					return pe32.th32ProcessID;
 				}
 			}
-			while (Process32Next(hSnap, &pe32));
+			while(Process32Next(hSnap, &pe32));
 		}
 		CloseHandle(hSnap);	
 	}
@@ -201,42 +205,41 @@ int ShowMessage(LPCSTR lpText, LPCSTR lpCaption, UINT uType)
 	return MessageBoxIndirect(&mbp);
 }
 
-UINT Peek(DWORD dwProcessId, DWORD dwAddress, LPVOID lpBuffer, UINT nBytes)
+UINT MemoryReadOrWrite(HANDLE hProcess, DWORD dwAddress, LPVOID lpBuffer, UINT nBytes, BOOL bWrite)
 {
 	SIZE_T uiBytes = 0;
 
-	HANDLE hProcess = OpenProcess(PROCESS_VM_READ, FALSE, dwProcessId);
-	if (hProcess != INVALID_HANDLE_VALUE)
+	if(hProcess != INVALID_HANDLE_VALUE)
 	{
-		ReadProcessMemory(hProcess, (LPVOID) dwAddress, lpBuffer, nBytes, &uiBytes);
-		CloseHandle(hProcess);
-	}
-	return uiBytes;
-}
-
-UINT Poke(DWORD dwProcessId, DWORD dwAddress, LPVOID lpBuffer, UINT nBytes)
-{
-	SIZE_T uiBytes = 0;
-	DWORD Protection;
-
-	HANDLE hProcess = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_WRITE, FALSE, dwProcessId);
-	if (hProcess != INVALID_HANDLE_VALUE)
-	{
-		if (VirtualProtectEx(hProcess, (LPVOID) dwAddress, nBytes, PAGE_EXECUTE_READWRITE, &Protection))
+		if(bWrite)
 		{
-			WriteProcessMemory(hProcess, (LPVOID) dwAddress, (LPCVOID) lpBuffer, nBytes, &uiBytes);
-			VirtualProtectEx(hProcess, (LPVOID) dwAddress, nBytes, Protection, &Protection);
+			DWORD Protection;
+			if (VirtualProtectEx(hProcess, (LPVOID) dwAddress, nBytes, PAGE_EXECUTE_READWRITE, &Protection))
+			{
+				WriteProcessMemory(hProcess, (LPVOID) dwAddress, (LPCVOID) lpBuffer, nBytes, &uiBytes);
+				VirtualProtectEx(hProcess, (LPVOID) dwAddress, nBytes, Protection, &Protection);
+			}
 		}
-		CloseHandle(hProcess);
+		else
+			ReadProcessMemory(hProcess, (LPVOID) dwAddress, lpBuffer, nBytes, &uiBytes);
 	}
+
 	return uiBytes;
 }
 
-
+static BOOL PatternComparison(BYTE *compare1, BYTE *compare2, UINT size)
+{
+	for(UINT i = 0; i < size; i++)
+	{
+		if(compare1[i] != compare2[i])
+			return false;
+	}
+	return true;
+}
 
 LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	switch (uMsg)
+	switch(uMsg)
 	{
 		case WM_CREATE:
 			hFont = CreateFontA(28, 0, 0, 0, FW_DONTCARE, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, VARIABLE_PITCH, "Comic Sans MS");
@@ -244,27 +247,27 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			break;
 
 		case WM_TIMER:
-			if (wParam == IDT_MAIN || wParam == IDT_HELLO)
+			if(wParam == IDT_MAIN || wParam == IDT_HELLO)
 			{
-				for (game = 0; game < 2; game++)
+				for(game = 0; game < 2; game++)
 				{
-					if (game == REHD)
+					if(game == REHD)
 						ProcessId = GetProcessId(szREHDExecutable);
-					else if (game == RE0)
+					else if(game == RE0)
 						ProcessId = GetProcessId(szRE0Executable);
 
-					if (ProcessId)
+					if(ProcessId)
 						break;
 				}
 			}
 
-			if (wParam == IDT_MAIN || (wParam == IDT_HELLO && ProcessId))
+			if(wParam == IDT_MAIN || (wParam == IDT_HELLO && ProcessId))
 			{
-				if (ProcessId)
+				if(ProcessId)
 				{
 					BYTE *origPattern, *moddedPattern;
 					DWORD *patches, patternSize, patchesSize;
-					if (game == REHD)
+					if(game == REHD)
 					{
 						origPattern = REHD_Pattern;
 						moddedPattern = REHD_DoorLoop;
@@ -272,7 +275,7 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 						patternSize = sizeof(REHD_Pattern);
 						patchesSize = sizeof(REHD_Patches) / 4;
 					}
-					else if (game == RE0)
+					else if(game == RE0)
 					{
 						origPattern = RE0_Pattern;
 						moddedPattern = RE0_DoorFloatMinusOne;
@@ -284,83 +287,62 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 					KillTimer(hWnd, wParam);
 					Sleep(1000);
 
-					DWORD Num;
-					BYTE* Buffer = patternReadBuffer;
-
-					Num = Peek(ProcessId, patches[0], Buffer, patternSize);
-					if (Num != patternSize)
+					HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, ProcessId); //This used to be "PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ" but changing it to "PROCESS_ALL_ACCESS" reduces the amount of false positives by anti-virus programs because I have no idea how any of this works it makes no sense aaaaargh
+					
+					DWORD Num = MemoryReadOrWrite(hProcess, patches[0], readBuffer, patternSize, false);
+					if(Num != patternSize)
 					{
 						uiStatus = IDS_FAILED_READ;
 					}
 					else
 					{
-						do
+						if(PatternComparison(readBuffer, origPattern, patternSize) == 0) //Check if the read pattern is different than the original non-modified pattern
 						{
-							if (Buffer[Num - 1] != origPattern[Num - 1])
-							{
-								break;
-							}
-							Num--;
-						} while (Num);
-
-						if (Num)
-						{
-							Num = patternSize;
-							do
-							{
-								if (Buffer[Num - 1] != moddedPattern[Num - 1])
-								{
-									break;
-								}
-								Num--;
-							} while (Num);
-
-							if (Num)
-							{
+							if(PatternComparison(readBuffer, moddedPattern, patternSize) == 0) //Check if the read pattern is different than the door skip modded pattern (if true, then we're probably hooking onto a different version of the game)
 								uiStatus = IDS_FAILED_VERSION;
-							}
 							else
-							{
 								uiStatus = IDS_ALREADY_ACTIVE;
-							}
 						}
 						else
 						{
 							SIZE_T uBytes;
-
-							for (Num = 0; Num != patchesSize; Num += 3)
+							uiStatus = IDS_ACTIVATED;
+							for(UINT i = 0; i < patchesSize; i += 3)
 							{
-								if (patches[Num + 1] == 0)
+								//patches[i + 0] = Address we write to
+								//patches[i + 1] = Pointer to pattern to write
+								//patches[i + 2] = Size of pattern
+								if(patches[i + 1] == 0) //If there's no pointer to pattern to overwrite with, then we write NOPs
 								{
 									BYTE nop = 0x90;
-									for (DWORD i = 0; i < patches[Num + 2]; i++)
+									for(DWORD j = 0; j < patches[i + 2]; j++)
 									{
-										uBytes = Poke(ProcessId, patches[Num] + i, (LPVOID) &nop, 1);
-										if (!uBytes)
+										uBytes = MemoryReadOrWrite(hProcess, patches[i + 0] + j, (LPVOID) &nop, 1, true); //Write one NOP
+										if(uBytes == 0)
 										{
 											uiStatus = IDS_FAILED_WRITE;
-											Num = 0;
 											break;
 										}
 									}
+									if(uiStatus == IDS_FAILED_WRITE)
+										break;
 								}
-								else
+								else //Write a pre-defined pattern
 								{
-									uBytes = Poke(ProcessId, patches[Num], (LPVOID) patches[Num + 1], patches[Num + 2]);
-									if (!uBytes)
+									uBytes = MemoryReadOrWrite(hProcess, patches[i + 0], (LPVOID) patches[i + 1], patches[i + 2], true);
+									if(!uBytes)
 									{
 										uiStatus = IDS_FAILED_WRITE;
-										Num = 0;
 										break;
 									}
 								}
 							}
-							if (Num)
-							{
-								uiStatus = IDS_ACTIVATED;
-							}
 						}
 					}
+					
+					if(hProcess != INVALID_HANDLE_VALUE)
+						CloseHandle(hProcess);
+
 					InvalidateRect(hWnd, NULL, FALSE);
 					if (uiStatus != IDS_FAILED_READ && uiStatus != IDS_FAILED_WRITE && uiStatus != IDS_FAILED_VERSION)
 					{
@@ -434,12 +416,12 @@ BOOLEAN IsCommandSet(LPWSTR Command)
 	LPWSTR *arg;
 
 	arg = CommandLineToArgvW(GetCommandLineW(), &c);
-	if (arg)
+	if(arg)
 	{
 		c--;
-		while (c)
+		while(c)
 		{
-			if (!lstrcmpiW(arg[c], Command))
+			if(!lstrcmpiW(arg[c], Command))
 			{
 				return TRUE;
 			}
@@ -449,12 +431,12 @@ BOOLEAN IsCommandSet(LPWSTR Command)
 	return FALSE;
 }
 
-void Entry()
+INT APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow)
 {
 	hWin = FindWindow(szClassName, szWindowName);
-	if (hWin)
+	if(hWin)
 	{
-		if (IsIconic(hWin))
+		if(IsIconic(hWin))
 		{
 			ShowWindow(hWin, SW_RESTORE);
 		}
@@ -471,14 +453,14 @@ void Entry()
 		}
 		else*/
 		{
-			if (IsCommandSet(L"-launchRE1") && GetProcessId("steam.exe") && !GetProcessId(szREHDExecutable))
+			if((IsCommandSet(L"-launchRE1") || IsCommandSet(L"-launchREHD")) && GetProcessId("steam.exe") && !GetProcessId(szREHDExecutable))
 			{
 				if ((int) ShellExecute(NULL, "open", "steam://rungameid/304240", NULL, NULL, SW_SHOWDEFAULT) <= 32)
 				{
 					ShowMessage("Error: Failed to launch RE HD Remaster.", szWindowName, MB_OK | MB_ICONERROR);
 				}
 			}
-			else if (IsCommandSet(L"-launchRE0") && GetProcessId("steam.exe") && !GetProcessId(szRE0Executable))
+			else if((IsCommandSet(L"-launchRE0") || IsCommandSet(L"-launchRE0HD")) && GetProcessId("steam.exe") && !GetProcessId(szRE0Executable))
 			{
 				if ((int) ShellExecute(NULL, "open", "steam://rungameid/339340", NULL, NULL, SW_SHOWDEFAULT) <= 32)
 				{
