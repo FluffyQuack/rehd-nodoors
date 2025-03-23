@@ -6,9 +6,12 @@
 	Written by FluffyQuack
 
 	--Change log--
+	v1.51:
+	- Support for new RE0 patch.
+
 	v1.5:
 	- Code cleanup
-	- Changed compiler to VS2008 so the program won't be detected as false positives in anti-virus
+	- Changed compiler so the program won't be detected as false positives in anti-virus
 
 	v1.41:
 	- Removed admin check
@@ -54,7 +57,7 @@ enum
 UINT uiStatus = IDS_HELLO;
 const char *sStatus[] =
 {
-	"Door Skip mod by FluffyQuack (v1.5)", //IDS_HELLO
+	"Door Skip mod by FluffyQuack (v1.51)", //IDS_HELLO
 	"Waiting for game to start...", //IDS_WAITING
 	"Error: Couldn't read game memory.", //IDS_FAILED_READ
 	"Error: Couldn't write to game memory.", //IDS_FAILED_WRITE
@@ -115,10 +118,17 @@ BYTE RE0_Pattern[] =
 };
 */
 
-//Pattern for patch on 2018/10/19
+/*//Pattern for patch on 2018/10/19
 BYTE RE0_Pattern[] =
 {
 	0xF3, 0x0F, 0x10, 0x40, 0x38, 0xF3, 0x0F, 0x59, 0x05, 0x64, 0xA4, 0xCB, 0x00, 0xF3
+};
+*/
+
+//Pattern for patch around 2025/03
+BYTE RE0_Pattern[] =
+{
+	0xF3, 0x0F, 0x10, 0x40, 0x38, 0xF3, 0x0F, 0x59, 0x05, 0x14, 0xA4, 0xCB, 0x00, 0xF3
 };
 
 BYTE RE0_DoorFloatMinusOne[] = 
@@ -140,13 +150,23 @@ DWORD RE0_Patches[12] =
 };
 */
 
-//Offsets for patch released on 2018/10/19
+/* //Offsets for patch released on 2018/10/19
 DWORD RE0_Patches[12] =
 {
 	0x552B93, (DWORD) RE0_DoorFloatMinusOne, sizeof(RE0_DoorFloatMinusOne),
 	0x552B93 + sizeof(RE0_DoorFloatMinusOne), 0, 28,
 	0x5532B0, (DWORD) RE0_NoDoorSounds, sizeof(RE0_NoDoorSounds),
 	0x5527B0, 0, 6,
+};
+*/
+
+//Offsets for patch released around 2025/03
+DWORD RE0_Patches[12] =
+{
+	0x552A13, (DWORD) RE0_DoorFloatMinusOne, sizeof(RE0_DoorFloatMinusOne),
+	0x552A13 + sizeof(RE0_DoorFloatMinusOne), 0, 28,
+	0x553130, (DWORD) RE0_NoDoorSounds, sizeof(RE0_NoDoorSounds),
+	0x552630, 0, 6,
 };
 
 /*BOOL IsAdmin()
@@ -285,9 +305,10 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 					}
 
 					KillTimer(hWnd, wParam);
-					Sleep(1000);
+					Sleep(1500);
 
-					HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, ProcessId); //This used to be "PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ" but changing it to "PROCESS_ALL_ACCESS" reduces the amount of false positives by anti-virus programs because I have no idea how any of this works it makes no sense aaaaargh
+					//HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, ProcessId); //This used to be "PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ" but changing it to "PROCESS_ALL_ACCESS" reduces the amount of false positives by anti-virus programs because I have no idea how any of this works it makes no sense aaaaargh
+					HANDLE hProcess = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, ProcessId); //This used to be "PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ" but changing it to "PROCESS_ALL_ACCESS" reduces the amount of false positives by anti-virus programs because I have no idea how any of this works it makes no sense aaaaargh
 					
 					DWORD Num = MemoryReadOrWrite(hProcess, patches[0], readBuffer, patternSize, false);
 					if(Num != patternSize)
@@ -416,12 +437,12 @@ BOOLEAN IsCommandSet(LPWSTR Command)
 	LPWSTR *arg;
 
 	arg = CommandLineToArgvW(GetCommandLineW(), &c);
-	if(arg)
+	if (arg)
 	{
 		c--;
-		while(c)
+		while (c)
 		{
-			if(!lstrcmpiW(arg[c], Command))
+			if (!lstrcmpiW(arg[c], Command))
 			{
 				return TRUE;
 			}
@@ -431,12 +452,12 @@ BOOLEAN IsCommandSet(LPWSTR Command)
 	return FALSE;
 }
 
-INT APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow)
+void Entry()
 {
 	hWin = FindWindow(szClassName, szWindowName);
-	if(hWin)
+	if (hWin)
 	{
-		if(IsIconic(hWin))
+		if (IsIconic(hWin))
 		{
 			ShowWindow(hWin, SW_RESTORE);
 		}
@@ -453,7 +474,7 @@ INT APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
 		}
 		else*/
 		{
-			if((IsCommandSet(L"-launchRE1") || IsCommandSet(L"-launchREHD")) && GetProcessId("steam.exe") && !GetProcessId(szREHDExecutable))
+			if((IsCommandSet(L"-launchRE1") || IsCommandSet(L"-launchREHD") || IsCommandSet(L"-launchRE1HD")) && GetProcessId("steam.exe") && !GetProcessId(szREHDExecutable))
 			{
 				if ((int) ShellExecute(NULL, "open", "steam://rungameid/304240", NULL, NULL, SW_SHOWDEFAULT) <= 32)
 				{
