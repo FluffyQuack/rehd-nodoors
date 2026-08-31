@@ -452,6 +452,27 @@ BOOLEAN IsCommandSet(LPWSTR Command)
 	return FALSE;
 }
 
+LPWSTR GetCommandArg(LPWSTR Command)
+{
+	int c, i;
+	LPWSTR *arg;
+
+	arg = CommandLineToArgvW(GetCommandLineW(), &c);
+	if (arg)
+	{
+		for (i = 1; i < c; i++)
+		{
+			if (!lstrcmpiW(arg[i], Command))
+			{
+				if (i + 1 < c)
+					return arg[i + 1];
+				return NULL;
+			}
+		}
+	}
+	return NULL;
+}
+
 void Entry()
 {
 	hWin = FindWindow(szClassName, szWindowName);
@@ -474,7 +495,15 @@ void Entry()
 		}
 		else*/
 		{
-			if((IsCommandSet(L"-launchRE1") || IsCommandSet(L"-launchREHD") || IsCommandSet(L"-launchRE1HD")) && GetProcessId("steam.exe") && !GetProcessId(szREHDExecutable))
+			LPWSTR customPath = GetCommandArg(L"-path");
+			if (customPath && !GetProcessId(szREHDExecutable) && !GetProcessId(szRE0Executable))
+			{
+				if ((int) ShellExecuteW(NULL, L"open", customPath, NULL, NULL, SW_SHOWDEFAULT) <= 32)
+				{
+					ShowMessage("Error: Failed to launch game executable.", szWindowName, MB_OK | MB_ICONERROR);
+				}
+			}
+			else if((IsCommandSet(L"-launchRE1") || IsCommandSet(L"-launchREHD") || IsCommandSet(L"-launchRE1HD")) && GetProcessId("steam.exe") && !GetProcessId(szREHDExecutable))
 			{
 				if ((int) ShellExecute(NULL, "open", "steam://rungameid/304240", NULL, NULL, SW_SHOWDEFAULT) <= 32)
 				{
