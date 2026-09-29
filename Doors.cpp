@@ -184,7 +184,7 @@ DWORD RE0_Patches[RE0_PATCHCOUNT * 2] =
 };
 
 #define RE0_ADDRESS_VARIANTS 3
-DWORD RE0_Addresses[REHD_ADDRESS_VARIANTS][4] = 
+DWORD RE0_Addresses[RE0_ADDRESS_VARIANTS][4] = 
 {
 	//Release version
 	{
@@ -349,6 +349,11 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 					//HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, ProcessId); //This used to be "PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ" but changing it to "PROCESS_ALL_ACCESS" reduces the amount of false positives by anti-virus programs because I have no idea how any of this works it makes no sense aaaaargh
 					HANDLE hProcess = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, ProcessId); //This used to be "PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ" but changing it to "PROCESS_ALL_ACCESS" reduces the amount of false positives by anti-virus programs because I have no idea how any of this works it makes no sense aaaaargh
+					if(!hProcess)
+					{
+						uiStatus = IDS_FAILED_READ;
+						goto patchDone;
+					}
 					
 					//Cycle between multiple address to see if we can find the correct one, starting with the newest address
 					int addressIdx;
@@ -428,7 +433,7 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 								if(patchPtr == 0) //If there's no pointer to pattern to overwrite with, then we write NOPs
 								{
 									uBytes = MemoryReadOrWrite(hProcess, curAddress, (LPVOID) GIGANTIC_ARRAY_OF_NOPS_AW_YEAH_THIS_ARRAY_IS_SOOOOOO_COOL_WOOOOOW, patchSize, true);
-									if(!uBytes)
+									if(uBytes != patchSize)
 									{
 										uiStatus = IDS_FAILED_WRITE;
 										goto patchDone;
@@ -437,7 +442,7 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 								else //Write a pre-defined pattern
 								{
 									uBytes = MemoryReadOrWrite(hProcess, curAddress, (LPVOID) patchPtr, patchSize, true);
-									if(!uBytes)
+									if(uBytes != patchSize)
 									{
 										uiStatus = IDS_FAILED_WRITE;
 										goto patchDone;
@@ -464,7 +469,7 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 					}
 					
 				patchDone:
-					if(hProcess != INVALID_HANDLE_VALUE)
+					if(hProcess)
 						CloseHandle(hProcess);
 
 					InvalidateRect(hWnd, NULL, FALSE);
