@@ -8,6 +8,8 @@
 	--Change log--
 	v1.52:
 	- Support for new RE1 HD patch.
+	- Updated the code to check multiple addresses so it works with multiple versions.
+
 	v1.51:
 	- Support for new RE0 patch.
 
@@ -59,7 +61,7 @@ enum
 UINT uiStatus = IDS_HELLO;
 const char *sStatus[] =
 {
-	"Door Skip mod by FluffyQuack (v1.52 WIP)", //IDS_HELLO
+	"Door Skip mod by FluffyQuack (v1.52)", //IDS_HELLO
 	"Waiting for game to start...", //IDS_WAITING
 	"Error: Couldn't read game memory.", //IDS_FAILED_READ
 	"Error: Couldn't write to game memory.", //IDS_FAILED_WRITE
@@ -73,21 +75,23 @@ const char szWindowName[] = "Door Skip mod";
 const char szREHDExecutable[] = "bhd.exe";
 const char szRE0Executable[] = "re0hd.exe";
 BYTE readBuffer[100];
-BYTE REHD_Pattern[5] =
+
+//For versions older than 2026
+BYTE REHD_Pattern_2015[5] = //Bigger context: 8B 46 48 85 C0 0F 84 AA 00 00 00 83 B8 F0 00 00
 {
 	0x8B, 0x46, 0x48, 0x85, 0xC0
 };
-BYTE REHD_DoorLoop[5] =
+BYTE REHD_DoorLoop_2015[5] = 
 {
 	0xE9, 0x9F, 0x00, 0x00, 0x00
 };
 
 //For 2026-09 build
-BYTE REHD_Pattern_New[5] = //Bigger context: 8B 77 48 85 F6 0f 84 1C 02 00 00
+BYTE REHD_Pattern_2026[5] = //Bigger context: 8B 77 48 85 F6 0f 84 1C 02 00 00
 {
 	0x8B, 0x77, 0x48, 0x85, 0xF6
 };
-BYTE REHD_DoorLoop_New[5] = //Jump from 0x47C745 to 0x47C95B
+BYTE REHD_DoorLoop_2026[5] = //Jump from 0x47C745 to 0x47C95B
 {
 	0xE9, 0x11, 0x02, 0x00, 0x00
 };
@@ -106,34 +110,13 @@ BYTE REHD_LiftFix[1] = //Bigger context: 68 FB 00 00 00 EB 1D 68 F7 00 00 00 EB 
 	0xFA
 };
 
-/* Offsets for release version
-DWORD REHD_Patches[12] =
-{                             
-	0x41CD53, (DWORD) REHD_DoorLoop, sizeof(REHD_DoorLoop),
-	0x41CEF5, (DWORD) REHD_DoorEvent, sizeof(REHD_DoorEvent),
-	0x41D0CF, (DWORD) REHD_DoorEventReturn, sizeof(REHD_DoorEventReturn),
-	0x60E789 + 1, (DWORD) REHD_LiftFix, sizeof(REHD_LiftFix)
-};
-*/
-
-/*
-//Offsets for patch released on 2018/10/19
-DWORD REHD_Patches[12] =
+#define REHD_PATCHCOUNT 4
+DWORD REHD_Patches[REHD_PATCHCOUNT * 2] =
 {
-	0x41CD83, (DWORD)REHD_DoorLoop_Old, sizeof(REHD_DoorLoop_Old), //Address is 0x30 bytes later than release version
-	0x41CF35, (DWORD)REHD_DoorEvent, sizeof(REHD_DoorEvent), //Address is 0x40 bytes later than release version
-	0x41D10F, (DWORD)REHD_DoorEventReturn, sizeof(REHD_DoorEventReturn), //Address is 0x40 bytes later than release version
-	0x611A19 + 1, (DWORD)REHD_LiftFix, sizeof(REHD_LiftFix) //Address is 0x3290 bytes later than release version
-};
-*/
-
-//Offsets for patch released on 2018/10/19
-DWORD REHD_Patches[12] =
-{
-	0x47C745, (DWORD)REHD_DoorLoop_New, sizeof(REHD_DoorLoop_New), //Address is 0x30 bytes later than release version
-	0x47CA65, (DWORD)REHD_DoorEvent, sizeof(REHD_DoorEvent), //Address is 0x40 bytes later than release version
-	0x47CC3F, (DWORD)REHD_DoorEventReturn, sizeof(REHD_DoorEventReturn), //Address is 0x40 bytes later than release version
-	0x668A99 + 1, (DWORD)REHD_LiftFix, sizeof(REHD_LiftFix) //Address is 0x3290 bytes later than release version
+	(DWORD)REHD_DoorLoop_2026, sizeof(REHD_DoorLoop_2026),
+	(DWORD)REHD_DoorEvent, sizeof(REHD_DoorEvent),
+	(DWORD)REHD_DoorEventReturn, sizeof(REHD_DoorEventReturn),
+	(DWORD)REHD_LiftFix, sizeof(REHD_LiftFix)
 };
 
 #define REHD_ADDRESS_VARIANTS 3
@@ -164,22 +147,20 @@ DWORD REHD_Addresses[REHD_ADDRESS_VARIANTS][4] =
 	},
 };
 
-/* Pattern for release version
-BYTE RE0_Pattern[] =
+//Pattern for release version
+BYTE RE0_Pattern_Release[] =
 {
 	0xF3, 0x0F, 0x10, 0x40, 0x38, 0xF3, 0x0F, 0x59, 0x05, 0xDC, 0xA4, 0xCB, 0x00, 0xF3
 };
-*/
 
-/*//Pattern for patch on 2018/10/19
-BYTE RE0_Pattern[] =
+//Pattern for patch on 2018/10/19
+BYTE RE0_Pattern_2018[] =
 {
 	0xF3, 0x0F, 0x10, 0x40, 0x38, 0xF3, 0x0F, 0x59, 0x05, 0x64, 0xA4, 0xCB, 0x00, 0xF3
 };
-*/
 
 //Pattern for patch around 2025/03
-BYTE RE0_Pattern[] =
+BYTE RE0_Pattern_2025[] =
 {
 	0xF3, 0x0F, 0x10, 0x40, 0x38, 0xF3, 0x0F, 0x59, 0x05, 0x14, 0xA4, 0xCB, 0x00, 0xF3
 };
@@ -193,34 +174,45 @@ BYTE RE0_NoDoorSounds[] =
 	0xC3, 0x90, 0x90
 };
 
-/* Offsets for release version
-DWORD RE0_Patches[12] =
+#define RE0_PATCHCOUNT 4
+DWORD RE0_Patches[RE0_PATCHCOUNT * 2] =
 {
-	0x552DB3, (DWORD)RE0_DoorFloatMinusOne, sizeof(RE0_DoorFloatMinusOne),
-	0x552DB3 + sizeof(RE0_DoorFloatMinusOne), 0, 28,
-	0x5534D0, (DWORD)RE0_NoDoorSounds, sizeof(RE0_NoDoorSounds),
-	0x5529D0, 0, 6,
+	(DWORD) RE0_DoorFloatMinusOne, sizeof(RE0_DoorFloatMinusOne),
+	0, 28,
+	(DWORD) RE0_NoDoorSounds, sizeof(RE0_NoDoorSounds),
+	0, 6,
 };
-*/
 
-/* //Offsets for patch released on 2018/10/19
-DWORD RE0_Patches[12] =
+#define RE0_ADDRESS_VARIANTS 3
+DWORD RE0_Addresses[REHD_ADDRESS_VARIANTS][4] = 
 {
-	0x552B93, (DWORD) RE0_DoorFloatMinusOne, sizeof(RE0_DoorFloatMinusOne),
-	0x552B93 + sizeof(RE0_DoorFloatMinusOne), 0, 28,
-	0x5532B0, (DWORD) RE0_NoDoorSounds, sizeof(RE0_NoDoorSounds),
-	0x5527B0, 0, 6,
-};
-*/
+	//Release version
+	{
+		0x552DB3, //RE0_DoorFloatMinusOne
+		0x552DB3 + sizeof(RE0_DoorFloatMinusOne), //0
+		0x5534D0, //RE0_NoDoorSounds
+		0x5529D0, //0
+	},
 
-//Offsets for patch released around 2025/03
-DWORD RE0_Patches[12] =
-{
-	0x552A13, (DWORD) RE0_DoorFloatMinusOne, sizeof(RE0_DoorFloatMinusOne),
-	0x552A13 + sizeof(RE0_DoorFloatMinusOne), 0, 28,
-	0x553130, (DWORD) RE0_NoDoorSounds, sizeof(RE0_NoDoorSounds),
-	0x552630, 0, 6,
+	//Offsets for patch released on 2018/10/19
+	{
+		0x552B93, //RE0_DoorFloatMinusOne
+		0x552B93 + sizeof(RE0_DoorFloatMinusOne), //0
+		0x5532B0, //RE0_NoDoorSounds
+		0x5527B0, //0
+	},
+
+	//Offsets for patch released around 2025/03
+	{
+		0x552A13, //RE0_DoorFloatMinusOne
+		0x552A13 + sizeof(RE0_DoorFloatMinusOne), //0
+		0x553130, //RE0_NoDoorSounds
+		0x552630, //0
+	},
 };
+
+//GIGANTIC ARRAY OF NOPS
+DWORD GIGANTIC_ARRAY_OF_NOPS_AW_YEAH_THIS_ARRAY_IS_SOOOOOO_COOL_WOOOOOW[25];
 
 /*BOOL IsAdmin()
 {
@@ -339,22 +331,17 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				if(ProcessId)
 				{
 					BYTE *origPattern, *moddedPattern;
-					DWORD *patches, patternSize, patchesSize;
+					DWORD *patches, patternSize, patchCount;
 					if(game == REHD)
 					{
-						origPattern = REHD_Pattern_New;
-						moddedPattern = REHD_DoorLoop_New;
 						patches = REHD_Patches;
-						patternSize = sizeof(REHD_Pattern_New);
-						patchesSize = sizeof(REHD_Patches) / 4;
+						patchCount = REHD_PATCHCOUNT;
 					}
 					else if(game == RE0)
 					{
-						origPattern = RE0_Pattern;
 						moddedPattern = RE0_DoorFloatMinusOne;
 						patches = RE0_Patches;
-						patternSize = sizeof(RE0_Pattern);
-						patchesSize = sizeof(RE0_Patches) / 4;
+						patchCount = RE0_PATCHCOUNT;
 					}
 
 					KillTimer(hWnd, wParam);
@@ -363,57 +350,120 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 					//HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, ProcessId); //This used to be "PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ" but changing it to "PROCESS_ALL_ACCESS" reduces the amount of false positives by anti-virus programs because I have no idea how any of this works it makes no sense aaaaargh
 					HANDLE hProcess = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, ProcessId); //This used to be "PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ" but changing it to "PROCESS_ALL_ACCESS" reduces the amount of false positives by anti-virus programs because I have no idea how any of this works it makes no sense aaaaargh
 					
-					DWORD Num = MemoryReadOrWrite(hProcess, patches[0], readBuffer, patternSize, false);
-					if(Num != patternSize)
+					//Cycle between multiple address to see if we can find the correct one, starting with the newest address
+					int addressIdx;
+					DWORD curAddress;
+					if(game == REHD)
 					{
-						uiStatus = IDS_FAILED_READ;
+						addressIdx = REHD_ADDRESS_VARIANTS - 1;
+						curAddress = REHD_Addresses[addressIdx][0];
 					}
-					else
+					else if(game == RE0)
 					{
-						if(PatternComparison(readBuffer, origPattern, patternSize) == 0) //Check if the read pattern is different than the original non-modified pattern
+						addressIdx = RE0_ADDRESS_VARIANTS - 1;
+						curAddress = RE0_Addresses[addressIdx][0];
+					}
+
+					while(1)
+					{
+						//Choose pattern that's appropriate for current version
+						if(game == REHD)
 						{
-							if(PatternComparison(readBuffer, moddedPattern, patternSize) == 0) //Check if the read pattern is different than the door skip modded pattern (if true, then we're probably hooking onto a different version of the game)
-								uiStatus = IDS_FAILED_VERSION;
-							else
-								uiStatus = IDS_ALREADY_ACTIVE;
+							if(addressIdx == 2) //2026-09 build
+							{
+								origPattern = REHD_Pattern_2026;
+								moddedPattern = REHD_DoorLoop_2026;
+								patternSize = sizeof(REHD_Pattern_2026);
+								REHD_Patches[0] = (DWORD) REHD_DoorLoop_2026;
+								REHD_Patches[1] = sizeof(REHD_DoorLoop_2026);
+							}
+							else //2015->2018 builds
+							{
+								origPattern = REHD_Pattern_2015;
+								moddedPattern = REHD_DoorLoop_2015;
+								patternSize = sizeof(REHD_Pattern_2015);
+								REHD_Patches[0] = (DWORD) REHD_DoorLoop_2015;
+								REHD_Patches[1] = sizeof(REHD_DoorLoop_2015);
+							}
 						}
-						else
+						else if(game == RE0)
 						{
+							if(addressIdx == 2) //2025-03 build
+							{
+								origPattern = RE0_Pattern_2025;
+								patternSize = sizeof(RE0_Pattern_2025);
+							}
+							else if(addressIdx == 1) //2018-10 build
+							{
+								origPattern = RE0_Pattern_2018;
+								patternSize = sizeof(RE0_Pattern_2018);
+							}
+							else //Release build
+							{
+								origPattern = RE0_Pattern_Release;
+								patternSize = sizeof(RE0_Pattern_Release);
+							}
+						}
+
+						//Check for pattern
+						DWORD Num = MemoryReadOrWrite(hProcess, curAddress, readBuffer, patternSize, false);
+						if(Num != patternSize)
+						{
+							uiStatus = IDS_FAILED_READ;
+							goto checkNextAddress;
+						}
+
+						if(PatternComparison(readBuffer, origPattern, patternSize)) //We found a valid match for pattern
+						{
+							//Apply patches
 							SIZE_T uBytes;
 							uiStatus = IDS_ACTIVATED;
-							for(UINT i = 0; i < patchesSize; i += 3)
+							for(UINT i = 0; i < patchCount; i++)
 							{
-								//patches[i + 0] = Address we write to
-								//patches[i + 1] = Pointer to pattern to write
-								//patches[i + 2] = Size of pattern
-								if(patches[i + 1] == 0) //If there's no pointer to pattern to overwrite with, then we write NOPs
+								DWORD patchPtr = patches[(i * 2) + 0]; //Pointer to patch data
+								DWORD patchSize = patches[(i * 2) + 1]; //Size of patch data
+								if(game == REHD) curAddress = REHD_Addresses[addressIdx][i];
+								else if(game == RE0) curAddress = RE0_Addresses[addressIdx][i];
+								
+								if(patchPtr == 0) //If there's no pointer to pattern to overwrite with, then we write NOPs
 								{
-									BYTE nop = 0x90;
-									for(DWORD j = 0; j < patches[i + 2]; j++)
-									{
-										uBytes = MemoryReadOrWrite(hProcess, patches[i + 0] + j, (LPVOID) &nop, 1, true); //Write one NOP
-										if(uBytes == 0)
-										{
-											uiStatus = IDS_FAILED_WRITE;
-											break;
-										}
-									}
-									if(uiStatus == IDS_FAILED_WRITE)
-										break;
-								}
-								else //Write a pre-defined pattern
-								{
-									uBytes = MemoryReadOrWrite(hProcess, patches[i + 0], (LPVOID) patches[i + 1], patches[i + 2], true);
+									uBytes = MemoryReadOrWrite(hProcess, curAddress, (LPVOID) GIGANTIC_ARRAY_OF_NOPS_AW_YEAH_THIS_ARRAY_IS_SOOOOOO_COOL_WOOOOOW, patchSize, true);
 									if(!uBytes)
 									{
 										uiStatus = IDS_FAILED_WRITE;
-										break;
+										goto patchDone;
+									}
+								}
+								else //Write a pre-defined pattern
+								{
+									uBytes = MemoryReadOrWrite(hProcess, curAddress, (LPVOID) patchPtr, patchSize, true);
+									if(!uBytes)
+									{
+										uiStatus = IDS_FAILED_WRITE;
+										goto patchDone;
 									}
 								}
 							}
+
+							uiStatus = IDS_ACTIVATED;
+							goto patchDone;
+						}
+						else if(PatternComparison(readBuffer, moddedPattern, patternSize)) //We found a valid match for a modified pattern
+						{
+							uiStatus = IDS_ALREADY_ACTIVE;
+							goto patchDone;
+						}
+
+					checkNextAddress:
+						addressIdx--;
+						if(addressIdx < 0)
+						{
+							uiStatus = IDS_FAILED_VERSION;
+							goto patchDone; //We failed to find a matching starting pattern
 						}
 					}
 					
+				patchDone:
 					if(hProcess != INVALID_HANDLE_VALUE)
 						CloseHandle(hProcess);
 
@@ -508,6 +558,10 @@ BOOLEAN IsCommandSet(LPWSTR Command)
 void Entry()
 {
 	hWin = FindWindow(szClassName, szWindowName);
+
+	//Fill in the PHAT super duper ultra mega hyper huge array of awesomeness I LIKE BIG ARRAYS AND I CANNOT LIE
+	for(int FREE_VARIABLE_NAME = 0; FREE_VARIABLE_NAME < 25; FREE_VARIABLE_NAME++) GIGANTIC_ARRAY_OF_NOPS_AW_YEAH_THIS_ARRAY_IS_SOOOOOO_COOL_WOOOOOW[FREE_VARIABLE_NAME] = 2425393296;
+
 	if (hWin)
 	{
 		if (IsIconic(hWin))
