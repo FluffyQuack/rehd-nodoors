@@ -6,6 +6,8 @@
 	Written by FluffyQuack
 
 	--Change log--
+	v1.52:
+	- Support for new RE1 HD patch.
 	v1.51:
 	- Support for new RE0 patch.
 
@@ -57,7 +59,7 @@ enum
 UINT uiStatus = IDS_HELLO;
 const char *sStatus[] =
 {
-	"Door Skip mod by FluffyQuack (v1.51)", //IDS_HELLO
+	"Door Skip mod by FluffyQuack (v1.52 WIP)", //IDS_HELLO
 	"Waiting for game to start...", //IDS_WAITING
 	"Error: Couldn't read game memory.", //IDS_FAILED_READ
 	"Error: Couldn't write to game memory.", //IDS_FAILED_WRITE
@@ -79,15 +81,27 @@ BYTE REHD_DoorLoop[5] =
 {
 	0xE9, 0x9F, 0x00, 0x00, 0x00
 };
-BYTE REHD_DoorEvent[] =
+
+//For 2026-09 build
+BYTE REHD_Pattern_New[5] = //Bigger context: 8B 77 48 85 F6 0f 84 1C 02 00 00
+{
+	0x8B, 0x77, 0x48, 0x85, 0xF6
+};
+BYTE REHD_DoorLoop_New[5] = //Jump from 0x47C745 to 0x47C95B
+{
+	0xE9, 0x11, 0x02, 0x00, 0x00
+};
+//Note, search for this in the future in case it's difficult to find door loop code again: 8B ?? 84 00 00 00 83 ?? 03 77
+
+BYTE REHD_DoorEvent[] = //Bigger context: C7 46 7C 00 00 00 00 C7 86 80 00 00 00 00 00 00 00 C7 86 84 00 00 00 02 00 00 00
 {
 	0xE9, 0x7E, 0x00, 0x00, 0x00
 };
-BYTE REHD_DoorEventReturn[] =
+BYTE REHD_DoorEventReturn[] = //Bigger context: 81 7E 78 19 01 00 00 75 07 C7 46 78 03 00 00 00
 {
 	0x5F, 0xC7, 0x86, 0x84, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x5E, 0x5D, 0x5B, 0xC2, 0x10, 0x00
 };
-BYTE REHD_LiftFix[1] =
+BYTE REHD_LiftFix[1] = //Bigger context: 68 FB 00 00 00 EB 1D 68 F7 00 00 00 EB 16 A1 2C
 {
 	0xFA
 };
@@ -102,13 +116,52 @@ DWORD REHD_Patches[12] =
 };
 */
 
+/*
 //Offsets for patch released on 2018/10/19
 DWORD REHD_Patches[12] =
 {
-	0x41CD83, (DWORD)REHD_DoorLoop, sizeof(REHD_DoorLoop),
-	0x41CF35, (DWORD)REHD_DoorEvent, sizeof(REHD_DoorEvent),
-	0x41D10F, (DWORD)REHD_DoorEventReturn, sizeof(REHD_DoorEventReturn),
-	0x611A19 + 1, (DWORD)REHD_LiftFix, sizeof(REHD_LiftFix)
+	0x41CD83, (DWORD)REHD_DoorLoop_Old, sizeof(REHD_DoorLoop_Old), //Address is 0x30 bytes later than release version
+	0x41CF35, (DWORD)REHD_DoorEvent, sizeof(REHD_DoorEvent), //Address is 0x40 bytes later than release version
+	0x41D10F, (DWORD)REHD_DoorEventReturn, sizeof(REHD_DoorEventReturn), //Address is 0x40 bytes later than release version
+	0x611A19 + 1, (DWORD)REHD_LiftFix, sizeof(REHD_LiftFix) //Address is 0x3290 bytes later than release version
+};
+*/
+
+//Offsets for patch released on 2018/10/19
+DWORD REHD_Patches[12] =
+{
+	0x47C745, (DWORD)REHD_DoorLoop_New, sizeof(REHD_DoorLoop_New), //Address is 0x30 bytes later than release version
+	0x47CA65, (DWORD)REHD_DoorEvent, sizeof(REHD_DoorEvent), //Address is 0x40 bytes later than release version
+	0x47CC3F, (DWORD)REHD_DoorEventReturn, sizeof(REHD_DoorEventReturn), //Address is 0x40 bytes later than release version
+	0x668A99 + 1, (DWORD)REHD_LiftFix, sizeof(REHD_LiftFix) //Address is 0x3290 bytes later than release version
+};
+
+#define REHD_ADDRESS_VARIANTS 3
+DWORD REHD_Addresses[REHD_ADDRESS_VARIANTS][4] = 
+{
+	//Release version
+	{
+		0x41CD53, //REHD_DoorLoop aka pattern
+		0x41CEF5, //REHD_DoorEvent
+		0x41D0CF, //REHD_DoorEventReturn
+		0x60E789 + 1, //REHD_LiftFix
+	},
+
+	//2018/10/19 patch
+	{
+		0x41CD83, //REHD_DoorLoop aka pattern
+		0x41CF35, //REHD_DoorEvent
+		0x41D10F, //REHD_DoorEventReturn
+		0x611A19 + 1, //REHD_LiftFix
+	},
+
+	//2026/09 patch
+	{
+		0x47C745, //REHD_DoorLoop aka pattern
+		0x47CA65, //REHD_DoorEvent
+		0x47CC3F, //REHD_DoorEventReturn
+		0x668A99 + 1, //REHD_LiftFix
+	},
 };
 
 /* Pattern for release version
@@ -289,10 +342,10 @@ LRESULT CALLBACK WinProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 					DWORD *patches, patternSize, patchesSize;
 					if(game == REHD)
 					{
-						origPattern = REHD_Pattern;
-						moddedPattern = REHD_DoorLoop;
+						origPattern = REHD_Pattern_New;
+						moddedPattern = REHD_DoorLoop_New;
 						patches = REHD_Patches;
-						patternSize = sizeof(REHD_Pattern);
+						patternSize = sizeof(REHD_Pattern_New);
 						patchesSize = sizeof(REHD_Patches) / 4;
 					}
 					else if(game == RE0)
